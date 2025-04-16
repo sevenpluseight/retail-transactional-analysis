@@ -7,10 +7,16 @@
 # data import
 data <- read.csv("retail_data.csv")
 
-# needed libraries
-library(dplyr)
-library(ggplot2)
+# required libraries: dplyr, ggplot2
+if (!require(dplyr)) {
+  install.packages("dplyr")
+  library(dplyr)
+}
 
+if (!require(ggplot2)) {
+  install.packages("ggplot2")
+  libraru(ggplot2)
+}
 # -------------------------------
 # Elysha Sophia binti Ridzuan - TP071162
 # total amount spend, positive feedback likelihood
