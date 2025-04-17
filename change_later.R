@@ -15,7 +15,7 @@ if (!require(dplyr)) {
 
 if (!require(ggplot2)) {
   install.packages("ggplot2")
-  libraru(ggplot2)
+  library(ggplot2)
 }
 # -------------------------------
 # Elysha Sophia binti Ridzuan - TP071162
