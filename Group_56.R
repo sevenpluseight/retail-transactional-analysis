@@ -5,7 +5,7 @@
 # 4. the analysis should be meaningful and effective in providing the information for decision-making
 
 # data import
-dataFinal1 <- read.csv("final_data_with_imputed_Customer_ID.csv")
+dataFinal1 <- read.csv("cleaned_data.csv")
 View(dataFinal1)
 
 # required libraries: dplyr, ggplot2
