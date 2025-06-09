@@ -14,44 +14,541 @@ library(ggplot2)
 library(tidyr)
 -----------------------------------------------------------------------
 # Elysha Sophia binti Ridzuan - TP071162
-# customer income levels, ratings, etc
-# To Investigate the relationship between customer income levels and product ratings to determine if income impacts satisfaction 
-# Do income levels (low, medium, high) and country influence customer satisfaction, as reflected in product ratings?
-# Contingency table for Income, Country, and Ratings
-income_country_ratings_table <- table(dataFinal1$Income, dataFinal1$Country, dataFinal1$Ratings)
+  # customer income levels, ratings
+  # To Investigate the relationship between customer income levels and product ratings to determine if income impacts customer satisfaction 
+  # Do income levels (low, medium, high) and country influence customer satisfaction, as reflected in product ratings?
+  # Contingency table for Income, Country, and Ratings(add 2 more variables)
+  # Summarize how Income Levels, Countries, and Ratings are distributed
+  income_country_ratings_table <- table(dataFinal1$Income, dataFinal1$Country, dataFinal1$Ratings)
 
 # Summarize distribution across income levels and countries
 dataFinal1 %>%
   group_by(Income, Country) %>%
   summarize(Count = n())
 
+# Checks if Income Level significantly affects Product Ratings
 # Perform chi-square test on Income and Ratings with Country as context
 chi_income_country_ratings <- chisq.test(table(dataFinal1$Income, dataFinal1$Ratings))
 chi_income_country_ratings
 
-#deep insights
+# deep insights
 chi_income_country_ratings$expected
 chi_income_country_ratings$observed
 
-#visualize
-install.packages("vcd")
-library(vcd)
-mosaic(~ Income + Ratings, data = dataFinal1, shade = TRUE)
+# Create Count (preserve original data structure)
+library(dplyr)
+dataFinal1 <- dataFinal1 %>%
+  group_by(Income, Ratings) %>%
+  mutate(Count = n())
 
-#proof for assumptions
+# visualize
+install.packages("pdp")
+library(vcd)
+mosaic(~ Income + Country + Ratings, data = dataFinal1, shade = TRUE)
+
+library(ggplot2)
+
+# Residuals calculation
+residuals_df <- as.data.frame(chi_income_country_ratings$residuals)
+colnames(residuals_df) <- c("Income", "Ratings", "Residuals")
+
+# Heatmap visualization
+ggplot(residuals_df, aes(x = Ratings, y = Income, fill = Residuals)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
+  theme_minimal() +
+  labs(title = "Heatmap of Chi-Squared Residuals",
+       x = "Ratings",
+       y = "Income Level",
+       fill = "Residuals Strength")
+
+# Proof for assumptions
+# Conducts multiple comparisons while adjusting for error.
 pairwise.prop.test(table(dataFinal1$Income, dataFinal1$Ratings), p.adjust.method = "bonferroni")
 
-library(vcd)
+library(plotly)
 
-mosaic(~ Income + Ratings, data = dataFinal1, shade = TRUE, legend = TRUE)
+# Convert categorical variables to numeric
+dataFinal1$Country_Num <- as.numeric(factor(dataFinal1$Country, levels = unique(dataFinal1$Country)))
+dataFinal1$Income_Num <- as.numeric(factor(dataFinal1$Income, levels = c("low", "medium", "high")))
 
-ggplot(dataFinal1, aes(x = Income, fill = Ratings)) +
-  geom_bar(position = "fill") +  # Stacked proportions
-  labs(title = "Proportion of Ratings by Income Level", x = "Income Level", y = "Proportion") +
+# 3D scatter plot with correct labeling
+plot_ly(dataFinal1, x = ~Country_Num, y = ~Income_Num, z = ~Count, 
+        type = "scatter3d", mode = "markers", color = ~Income, text = ~Country) %>%
+  layout(title = "3D Scatter Plot of Income Groups by Country",
+         scene = list(
+           xaxis = list(title = "Country", tickmode = "array", 
+                        tickvals = unique(dataFinal1$Country_Num), 
+                        ticktext = unique(dataFinal1$Country)),
+           yaxis = list(title = "Income Level"),
+           zaxis = list(title = "Count")
+         ))
+
+# Install & Load Libraries
+install.packages("ALEPlot")
+library(nnet)
+library(pscl)  # Load pscl early for pR2()
+
+# Ensure categorical variables are factors
+dataFinal1$Income <- factor(dataFinal1$Income, levels = c("low", "medium", "high"))
+dataFinal1$Country <- factor(dataFinal1$Country)  # Convert if needed
+dataFinal1$Ratings <- factor(dataFinal1$Ratings)  # Convert Ratings if needed
+
+# Build Multinomial Model
+glm_model_multi <- multinom(Ratings ~ Income * Country, data = dataFinal1)
+
+# Model Summary & Coefficients Assessment
+summary(glm_model_multi)
+z_values <- summary(glm_model_multi)$coefficients / summary(glm_model_multi)$standard.errors
+print(z_values)
+
+# Assess Model Fit Using McFadden’s Pseudo R²
+pseudo_r2 <- pR2(glm_model_multi)
+print(pseudo_r2)
+
+# Test Predictions on New Income & Country Values
+new_data <- data.frame(Income = factor(c("low", "high"), levels = c("low", "medium", "high")),
+                       Country = factor(c("uk", "germany"), levels = unique(dataFinal1$Country)))
+
+predicted_ratings <- predict(glm_model_multi, new_data)
+print(predicted_ratings)
+
+# Probability Estimates for Predictions
+probs <- predict(glm_model_multi, new_data, type = "probs")
+print(probs)
+#done
+----------------------------------
+# Does customer income level, country, order status, and feedback shape product ratings, revealing patterns in satisfaction trends?
+# prepare rating_num values as categorical
+dataFinal1$Ratings_Num <- ifelse(dataFinal1$Ratings == "low", 1, 
+                                   ifelse(dataFinal1$Ratings == "high", 2,NA ))
+# Check rating imbalance
+table(dataFinal1$Ratings_Num)  # Check counts of each class
+prop.table(table(dataFinal1$Ratings_Num))  # Check percentage distribution
+
+# Downsampling the rating
+library(dplyr)
+
+# Separate majority and minority classes
+minority_class <- dataFinal1 %>% filter(Ratings_Num == "1")
+majority_class <- dataFinal1 %>% filter(Ratings_Num == "2")
+
+# Randomly select a subset of majority class to match minority class size
+set.seed(42)  # For reproducibility
+majority_downsampled <- majority_class %>% sample_n(nrow(minority_class))
+
+# Combine balanced dataset
+data_downsampled <- rbind(majority_downsampled, minority_class)
+
+# Check balance
+table(data_downsampled$Ratings_Num)
+
+# Check the current changes 
+summary(data_downsampled)  # Ensure there are no unexpected missing values
+
+# Train a Classification Model
+data_downsampled$Ratings_Num <- factor(data_downsampled$Ratings_Num, levels = c("1", "2"))
+
+# Train model using corrected factor variable
+library(randomForest)
+rf_model <- randomForest(Ratings_Num ~ Income + Country + Order_Status + Feedback, 
+                         data = data_downsampled, 
+                         ntree = 500,  
+                         mtry = 3,  
+                         importance = TRUE)
+
+# Evaluate feature importance
+importance(rf_model)
+
+# Performance evaluation
+library(caret)
+
+# Define actual vs predicted values
+predictions <- predict(rf_model, data_downsampled)
+
+conf_matrix <- confusionMatrix(predictions, data_downsampled$Ratings_Num)
+
+# Print model accuracy & performance metrics
+print(conf_matrix)
+
+# Incorporate Time-Series Insights
+# must have declare "ds"
+library(dplyr)
+
+# Convert Month names to proper case (first letter uppercase)
+dataFinal1 <- dataFinal1 %>%
+  mutate(Month = tolower(Month)) %>%  # Convert everything to lowercase for consistency
+  mutate(Month = case_when(
+    Month == "january" ~ 1,
+    Month == "february" ~ 2,
+    Month == "march" ~ 3,
+    Month == "april" ~ 4,
+    Month == "may" ~ 5,
+    Month == "june" ~ 6,
+    Month == "july" ~ 7,
+    Month == "august" ~ 8,
+    Month == "september" ~ 9,
+    Month == "october" ~ 10,
+    Month == "november" ~ 11,
+    Month == "december" ~ 12,
+    TRUE ~ NA_real_  # Assign NA if unexpected value is found
+  ))
+
+# Verify conversion
+table(dataFinal1$Month)
+
+# Recreate the month_binary column
+dataFinal1 <- dataFinal1 %>%
+  mutate(Month_Binary = ifelse(Month %in% c(1, 2, 3, 4, 5, 6), 1, 0))
+
+# Verify results
+table(dataFinal1$Month_Binary)
+
+# Create synthetic date using Year & Month (set to first day of each month)
+dataFinal1 <- dataFinal1 %>%
+  mutate(ds = as.Date(paste(Year, Month, "01", sep = "-"), format = "%Y-%m-%d"))
+
+# Ensure there are no NA values in ds
+dataFinal1 <- dataFinal1 %>% filter(!is.na(ds))
+
+# Format dataset for Prophet
+prophet_data <- dataFinal1[, c("ds", "Ratings_Num")]
+colnames(prophet_data) <- c("ds", "y")  # Prophet requires 'ds' and 'y'
+
+# Train Prophet model
+library(prophet)
+model <- prophet(prophet_data)
+
+# Forecast next 12 months
+future <- make_future_dataframe(model, periods = 12, freq = "month")  # Predict next 12 months
+forecast <- predict(model, future)
+
+# Visualize predictions
+plot(model, forecast)
+
+#model XGBoost
+library(xgboost)
+
+# Convert data to matrix format for XGBoost
+data_matrix <- model.matrix(Ratings_Num ~ Income + Country + Order_Status + Feedback, data = data_downsampled)[,-1]
+labels <- as.numeric(data_downsampled$Ratings_Num) - 1  # Convert to binary (0,1)
+
+dtrain <- xgb.DMatrix(data = data_matrix, label = labels)
+
+# Train XGBoost model
+xgb_model <- xgboost(data = dtrain, nrounds = 500, objective = "binary:logistic")
+
+# Predictions
+xgb_preds <- predict(xgb_model, dtrain)
+xgb_conf_matrix <- confusionMatrix(factor(round(xgb_preds)), factor(labels))
+print(xgb_conf_matrix)
+
+# model linear regression
+# Train logistic regression model first
+log_model <- glm(Ratings_Num ~ Income + Country + Order_Status + Feedback, data = data_downsampled, family = binomial)
+
+# Generate predictions
+log_preds <- predict(log_model, data_downsampled, type = "response")
+
+# Ensure Ratings_Num is properly set as a factor before comparison
+data_downsampled$Ratings_Num <- factor(data_downsampled$Ratings_Num, levels = c(1, 2))
+
+# Round predictions and match factor levels
+log_preds_rounded <- factor(round(log_preds), levels = c(1, 2))
+
+# Compare levels (now this won't error)
+levels(factor(data_downsampled$Ratings_Num))  # Check levels in actual data
+levels(log_preds_rounded)  # Check levels in predictions
+
+# Predictions
+log_preds <- predict(log_model, data_downsampled, type = "response")
+log_conf_matrix <- confusionMatrix(log_preds_rounded, data_downsampled$Ratings_Num)
+print(log_conf_matrix)
+
+# Compare model performance
+model_performance <- data.frame(
+  Model = c("Random Forest", "XGBoost", "Logistic Regression"),
+  Accuracy = c(conf_matrix$overall["Accuracy"], 
+               xgb_conf_matrix$overall["Accuracy"], 
+               log_conf_matrix$overall["Accuracy"])
+)
+
+# Print comparison
+print(model_performance)
+
+# feature importance analysis
+varImpPlot(rf_model)  # Visualize feature importance
+
+# If Income & Feedback jointly affect satisfaction rather than treating them independently
+rf_model_interaction <- randomForest(Ratings_Num ~ Income * Feedback + Country + Order_Status, data = data_downsampled, ntree = 500)
+#check model summary
+print(rf_model_interaction)
+# feature importance analysis
+importance(rf_model_interaction)
+varImpPlot(rf_model_interaction)  # Visualize importance
+# make predictions
+rf_preds <- predict(rf_model_interaction, data_downsampled)
+#model accuracy
+library(caret)
+
+conf_matrix_interaction <- confusionMatrix(rf_preds, data_downsampled$Ratings_Num)
+print(conf_matrix_interaction)
+
+# partial dependence plots
+summary(data_downsampled$Income)
+str(data_downsampled$Income)
+data_downsampled <- data_downsampled %>%
+  mutate(Income = as.numeric(factor(Income, levels = c("low", "medium", "high"), ordered = TRUE)))
+# Ensure no NAs remain
+data_downsampled <- data_downsampled %>% filter(!is.na(Income))
+
+# visual
+library(pdp)
+partialPlot(rf_model_interaction, data_downsampled, Income)
+partialPlot(rf_model_interaction, data_downsampled, Feedback)
+
+# track how it changes over months
+library(ggplot2)
+# If the plot looks noisy, add a smooth trend line to highlight overall satisfaction patterns
+ggplot(dataFinal1, aes(x = ds, y = Ratings_Num, color = Income)) +
+  geom_line() +
   theme_minimal()
 
------------------------------------
-# Is there a relationship between customers income and spending tier, their satisfaction levels and month, as shown by product ratings?
+# Since you're analyzing satisfaction trends over time, add facet_wrap() to split trends by month
+ggplot(dataFinal1, aes(x = ds, y = Ratings_Num, color = Income)) +
+  geom_line() +
+  facet_wrap(~ Month) +  # Separates trends by month
+  theme_minimal()
+
+# Compare Rating Trends by Country
+ggplot(dataFinal1, aes(x = ds, y = Ratings_Num, color = Country)) +
+  geom_line() +
+  theme_minimal()
+
+#done
+---------------------------------------------------------------------------------------------
+# What specific products show the strongest income-level effects? (analysis question)
+# Helps identify how different income levels rate various product categories
+table(dataFinal1$Income, dataFinal1$Product_Category, dataFinal1$Ratings)
+
+dataFinal1$Ratings_Num <- ifelse(dataFinal1$Ratings == "low", 1, 
+                                 ifelse(dataFinal1$Ratings == "high", 5,NA ))
+
+dataFinal1$Ratings_Binary <- ifelse(dataFinal1$Ratings == "low", 0, 
+                                    ifelse(dataFinal1$Ratings == "high", 1,NA ))
+
+# This allows us to see which product types have the highest/lowest ratings across different income groups
+dataFinal1 %>%
+  group_by(Income, Product_Type) %>%
+  summarize(Average_Rating = mean(Ratings_Num))
+#If significant, we can focus on specific product types
+income_product_ratings_table <- table(dataFinal1$Income, dataFinal1$Product_Type)
+
+chi_income_product <- chisq.test(income_product_ratings_table)
+chi_income_product
+
+#This chart will show how income groups distribute ratings across product types
+ggplot(dataFinal1, aes(x = Product_Type, fill = Income)) +
+  geom_bar(position = "fill") +
+  coord_flip() +  # Flip to improve readability
+  labs(title = "Income-Level Effects on Product Ratings", x = "Product Type", y = "Proportion") +
+  theme_minimal()
+
+# Coefficients tell us how Income, Country, and Product_Type influence ratings
+model <- glm(Ratings_Binary ~ Income + Country + Product_Type, data = dataFinal1, family = binomial)
+summary(model)
+
+# To understand the likelihood of high ratings across income levels
+exp(coef(model))  # Convert log-odds to odds ratios
+
+# Measures overall correctness (35.11%)
+library(caret)
+predicted_ratings <- ifelse(predict(model, type = "response") > 0.5, 1, 0)
+confusionMatrix(as.factor(predicted_ratings), as.factor(dataFinal1$Ratings_Num))
+
+# Visualize results
+ggplot(dataFinal1, aes(x = Income, fill = Country)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ Product_Type) +
+  labs(title = "Density of Income Levels Across Product Types", x = "Income Level", y = "Density") +
+  theme_minimal()
+
+# Must use other model, XGBoost (65.02%)
+#Convert categorical variables into numeric representations.
+#XGBoost requires input as matrix format
+library(dplyr)
+
+# Convert categorical variables to factors, then to numeric
+dataFinal1 <- dataFinal1 %>%
+  mutate(
+    Ratings_Num = ifelse(Ratings == "high", 1, 0),  
+    Income_Num = as.numeric(factor(Income, levels = c("low", "medium", "high"))),
+    Country_Num = as.numeric(factor(Country)),
+    Product_Type_Num = as.numeric(factor(Product_Type))
+  )
+
+# Prepare data matrix
+X <- as.matrix(select(dataFinal1, Income_Num, Country_Num, Product_Type_Num))
+y <- dataFinal1$Ratings_Num
+
+# Create XGBoost Model
+library(xgboost)
+xgb_data <- xgb.DMatrix(data = X, label = y)
+
+# Define parameters
+params <- list(
+  objective = "binary:logistic",  # Classification task
+  eval_metric = "logloss",  # Loss metric for binary classification
+  eta = 0.1,  # Learning rate
+  max_depth = 6,  # Tree depth
+  subsample = 0.8,  # Fraction of data used for training
+  colsample_bytree = 0.8  # Feature sampling per tree
+)
+
+# Train model
+xgb_model <- xgb.train(params, xgb_data, nrounds = 100, verbose = TRUE)
+
+# Checks if predictions align with actual ratings
+predictions <- predict(xgb_model, X)
+predicted_labels <- ifelse(predictions > 0.5, 1, 0)
+
+library(caret)
+confusionMatrix(as.factor(predicted_labels), as.factor(y))
+
+# Feature Engineering – Introduce New Predictors
+dataFinal1 <- dataFinal1 %>%
+  mutate(
+    Payment_Num = as.numeric(factor(Payment_Method)),
+    Shipping_Num = as.numeric(factor(Shipping_Method))
+  )
+
+# LightGBM is faster and handles categorical features better than XGBoost
+install.packages("lightgbm")
+library(lightgbm)
+
+lgb_data <- lgb.Dataset(data = X, label = y)
+
+lgb_params <- list(objective = "binary", metric = "logloss", learning_rate = 0.05, num_leaves = 31)
+lgb_model <- lgb.train(params = lgb_params, data = lgb_data, nrounds = 200)
+
+predictions_lgb <- predict(lgb_model, X)
+confusionMatrix(as.factor(ifelse(predictions_lgb > 0.5, 1, 0)), as.factor(y))
+
+# Some relationships may be complex—explicitly adding interactions like
+dataFinal1 <- dataFinal1 %>%
+  mutate(Income_Product_Interaction = Income_Num * Product_Type_Num,
+         Country_Payment_Interaction = Country_Num * Payment_Num)
+
+# Adjust Probability Threshold Dynamically
+# This shows how different classification thresholds affect True Positive Rate (Sensitivity) vs. False Positive Rate (1 - Specificity)
+library(pROC)
+roc_curve <- roc(y, predictions_lgb)
+
+# Plot ROC Curve
+plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve for Threshold Analysis")
+
+# Add Optimal Threshold Marker
+optimal_threshold <- coords(roc_curve, "best", ret = "threshold")
+abline(v = optimal_threshold[1], col = "red", lwd = 2, lty = 2)  
+text(optimal_threshold[1], 0.5, labels = paste("Opt. Threshold:", round(optimal_threshold[1], 2)), col = "red", pos = 4)
+
+# This is useful when high ratings dominate, ensuring the model doesn't favor majority classes 
+library(PRROC)
+
+# Create Precision-Recall Curve
+pr_curve <- pr.curve(scores.class0 = predictions_lgb, weights.class0 = y, curve = TRUE)
+
+# Plot Precision-Recall Curve
+plot(pr_curve, col = "green", lwd = 2, main = "Precision-Recall Curve for Threshold Tuning")
+
+# Visualizes how performance changes as the threshold shifts
+thresholds <- seq(0.1, 0.9, by = 0.05)
+results <- data.frame()
+
+for (t in thresholds) {
+  predicted_labels <- ifelse(predictions_lgb > t, 1, 0)
+  cm <- confusionMatrix(as.factor(predicted_labels), as.factor(y))
+  
+  results <- rbind(results, data.frame(
+    Threshold = t,
+    Accuracy = cm$overall["Accuracy"],
+    Sensitivity = cm$byClass["Sensitivity"],
+    Specificity = cm$byClass["Specificity"]
+  ))
+}
+
+ggplot(results, aes(x = Threshold)) +
+  geom_line(aes(y = Accuracy, color = "Accuracy")) +
+  geom_line(aes(y = Sensitivity, color = "Sensitivity")) +
+  geom_line(aes(y = Specificity, color = "Specificity")) +
+  labs(title = "Threshold Optimization", x = "Threshold", y = "Metric Value") +
+  scale_color_manual(name = "Metrics", values = c("Accuracy" = "blue", "Sensitivity" = "red", "Specificity" = "green")) +
+  theme_minimal()
+
+# Simplifies the model, reducing overfitting risk
+importance_matrix <- xgb.importance(model = xgb_model, feature_names = colnames(X))
+print(importance_matrix)  # View top contributing features
+
+# Select only the strongest features
+X_refined <- as.matrix(select(dataFinal1, Income_Num, Product_Type_Num, Country_Num, Payment_Num))
+xgb_data_refined <- xgb.DMatrix(data = X_refined, label = y)
+
+# Model Evaluation Beyond Accuracy
+library(pROC)
+roc_curve <- roc(y, predictions_lgb)
+auc(roc_curve)  # Evaluate AUC for classification quality
+
+# feature refinment
+dataFinal1 <- dataFinal1 %>%
+  mutate(Income_Product_Interaction = Income_Num * Product_Type_Num)
+
+# train again with updated parameters
+params <- list(eta = 0.05, max_depth = 8, subsample = 0.9, colsample_bytree = 0.7)
+X_updated <- as.matrix(select(dataFinal1, Income_Num, Product_Type_Num, Country_Num, Payment_Num, Income_Product_Interaction))
+y <- dataFinal1$Ratings_Num
+xgb_data_updated <- xgb.DMatrix(data = X_updated, label = y)
+xgb_model_updated <- xgb.train(params, xgb_data_updated, nrounds = 100, verbose = TRUE)
+
+#evaluate performance
+predictions_updated <- predict(xgb_model_updated, X_updated)
+predicted_labels_updated <- ifelse(predictions_updated > 0.5, 1, 0)
+
+library(caret)
+confusionMatrix(as.factor(predicted_labels_updated), as.factor(y))
+
+# feature importance analysis
+importance_matrix_updated <- xgb.importance(model = xgb_model_updated, feature_names = colnames(X_updated))
+print(importance_matrix_updated)
+
+#AUC-ROC Validation
+library(pROC)
+roc_curve_updated <- roc(y, predictions_updated)
+auc(roc_curve_updated)
+
+# Visualizing the AUC-ROC Difference
+library(pROC)
+
+# Original ROC Curve
+roc_curve_original <- roc(y, predictions)
+auc_original <- auc(roc_curve_original)
+
+# Updated ROC Curve
+roc_curve_updated <- roc(y, predictions_updated)
+auc_updated <- auc(roc_curve_updated)
+
+# Plot ROC Curves
+plot(roc_curve_original, col = "red", lwd = 2, main = "AUC-ROC Comparison")
+lines(roc_curve_updated, col = "blue", lwd = 2)
+
+# Add Legend
+legend("bottomright", legend = c(
+  paste("Original AUC:", round(auc_original, 3)), 
+  paste("Updated AUC:", round(auc_updated, 3))
+), col = c("red", "blue"), lwd = 2)
+#done
+---------------------------------------------------------------------------------------------------
+  # Is there a relationship between customers income and spending tier, their satisfaction levels and month, as shown by product ratings? (analysis question)
+  # Prepare spending tier column
   dataFinal1 <- dataFinal1 %>%
   mutate(Spending_Tier = case_when(
     Total_Amount < 500 ~ "Low",
@@ -61,26 +558,72 @@ ggplot(dataFinal1, aes(x = Income, fill = Ratings)) +
 
 dataFinal1$Spending_Tier <- factor(dataFinal1$Spending_Tier, levels = c("Low", "Medium", "High"))
 
-  ggplot(dataFinal1, aes(x = Spending_Tier, y = Ratings, color = Income, group = Income)) +
-  stat_summary(fun = mean, geom = "line", linewidth = 1) +  # Use `linewidth` instead of `size`
-  labs(title = "Trend Analysis: Income vs Ratings Across Spending Tiers",
-       x = "Spending Tier", y = "Average Ratings") +
-  theme_minimal()
-  
 dataFinal1$Ratings_Num <- ifelse(dataFinal1$Ratings == "low", 1, 
-                                   ifelse(dataFinal1$Ratings == "high", 5,NA ))
+                                 ifelse(dataFinal1$Ratings == "high", 5,NA ))
 
+# This will count how many people gave high vs. low ratings, categorized by Spending Tier
+dataFinal1 <- dataFinal1 %>%
+  mutate(Rating_Category = ifelse(Ratings_Num == 1, "High", "Low"))
+
+# Count ratings per group
+rating_counts <- dataFinal1 %>%
+  group_by(Income, Spending_Tier, Rating_Category) %>%
+  summarize(Count = n()) %>%
+  ungroup()
+
+print(rating_counts)
+
+# Visualization
+ggplot(rating_counts, aes(x = Spending_Tier, y = Count, fill = Rating_Category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Income) +  # Separate charts per income level
+  scale_fill_manual(values = c("pink", "lightblue")) +  
+  labs(title = "High vs. Low Ratings Across Spending Tiers",
+       x = "Spending Tier", y = "Number of Ratings", fill = "Rating Level") +
+  theme_minimal()
+
+# Not enough difference
+chi_spending_ratings <- chisq.test(table(dataFinal1$Spending_Tier, dataFinal1$Rating_Category))
+print(chi_spending_ratings)
+
+# ANOVA tests whether any significant rating differences exist between income and spending tiers
 anova_model <- aov(Ratings_Num ~ Income * Spending_Tier, data = dataFinal1)
 summary(anova_model)
-
+# Linear regression quantifies how much each factor influences ratings numerically
 reg_model <- lm(Ratings_Num ~ Income + Spending_Tier, data = dataFinal1)
 summary(reg_model)
 
 dataFinal1$Ratings_Binary <- ifelse(dataFinal1$Ratings_Num == 1, 0, 
                                     ifelse(dataFinal1$Ratings_Num == 5, 1, NA))
 
+# Logistic regression focuses on binary satisfaction (high vs. low ratings)
 log_model <- glm(Ratings_Binary ~ Income + Spending_Tier, family = binomial, data = dataFinal1)
 summary(log_model)
+
+# This counts high vs. low ratings per month, revealing seasonal shifts
+rating_month_counts <- dataFinal1 %>%
+  group_by(Month, Rating_Category) %>%
+  summarize(Count = n()) %>%
+  ungroup()
+
+print(rating_month_counts)
+
+# Visualizing Monthly Rating Trends
+ggplot(rating_month_counts, aes(x = Month, y = Count, fill = Rating_Category)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("brown", "lightblue")) +  
+  labs(title = "Monthly Distribution of High vs. Low Ratings",
+       x = "Month", y = "Number of Ratings", fill = "Rating Level") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# If ratings fluctuate over time, check whether satisfaction is significantly different across months
+chi_monthly_ratings <- chisq.test(table(dataFinal1$Month, dataFinal1$Rating_Category))
+print(chi_monthly_ratings)
+
+# Reveals seasonal rating shifts across different spending groups.
+anova_model_month <- aov(Ratings_Num ~ Income * Spending_Tier * Month, data = dataFinal1)
+summary(anova_model_month)
 
 #assumptions 1
 aggregate(Ratings_Num ~ Income, data = dataFinal1, mean)
@@ -90,33 +633,32 @@ summary(aov_income)
 
 TukeyHSD(aov_income)
 
-dataFinal1$Ratings_Factor <- factor(dataFinal1$Ratings_Num, levels = c(1, 5), labels = c("Low", "High"))
-
-ggplot(dataFinal1, aes(x = Income, fill = Ratings_Factor)) +
+ggplot(dataFinal1, aes(x = Income, fill = Ratings)) +
   geom_bar(position = "fill") +
-  labs(title = "Proportion of High and Low Ratings by Income Level",
+  labs(title = "Proportion of High VS Low Ratings by Income Level",
        x = "Income Level", y = "Proportion") +
   theme_minimal()
 
 chisq.test(table(dataFinal1$Income, dataFinal1$Ratings_Num))
 
+# add clustering to see any changes
 -------------------------------
-# Which spending tier , payment method and total amount receive the highest ratings, and how does this reflect customer preferences? 
-install.packages("factoextra")
-library(cluster)
+  # Which spending tier , payment method and total amount receive the highest ratings, and how does this reflect customer preferences? (analysis question) 
+  library(cluster)
 library(factoextra)
 
 dataFinal1$Income <- as.numeric(as.factor(dataFinal1$Income))
 dataFinal1$Spending_Tier <- as.numeric(as.factor(dataFinal1$Spending_Tier))
+dataFinal1$Payment_Method <- as.numeric(as.factor(dataFinal1$Payment_Method))  # Convert categorical variable to numeric
 
 # Select relevant variables for clustering
 data_cluster <- dataFinal1 %>%
-  select(Income, Spending_Tier, Ratings_Num, Total_Amount) %>%
-  scale()  # Standardize for better clustering
+  select(Income, Spending_Tier, Ratings_Num, Total_Amount, Payment_Method) %>%
+  scale()  # Standardize variables for better clustering
 
 # Run K-Means with optimal clusters
 set.seed(123)
-kmeans_result <- kmeans(data_cluster, centers = 4)  # Adjust centers based on patterns
+kmeans_result <- kmeans(data_cluster, centers = 5)  # Adjust centers based on patterns
 
 # Add cluster labels to dataset
 dataFinal1$Cluster <- factor(kmeans_result$cluster)
@@ -124,46 +666,92 @@ dataFinal1$Cluster <- factor(kmeans_result$cluster)
 # Visualize clusters
 fviz_cluster(kmeans_result, data = data_cluster, geom = "point")
 
+# This tells you the average values of Income, Spending_Tier, Ratings_Num, and Total_Amount within each cluster
+cluster_centroids <- aggregate(data_cluster, by = list(Cluster = kmeans_result$cluster), FUN = mean)
+print(cluster_centroids)
+
+# Identifies which cluster contains the largest group of customers.
+table(dataFinal1$Cluster, dataFinal1$Payment_Method)
+
+# Check if Income, Spending_Tier, Ratings_Num, and Total_Amount are significantly different across clusters
+anova_income <- aov(Income ~ Cluster, data = dataFinal1)
+summary(anova_income)
+
+anova_spending <- aov(Spending_Tier ~ Cluster, data = dataFinal1)
+summary(anova_spending)
+
+anova_ratings <- aov(Ratings_Num ~ Cluster, data = dataFinal1)
+summary(anova_ratings)
+
+anova_ratings <- aov(Total_Amount ~ Cluster, data = dataFinal1)
+summary(anova_ratings)
+
+# Aggregate total spending per cluster
+cluster_spending <- dataFinal1 %>%
+  group_by(Cluster, Ratings) %>%
+  summarize(Total_Spent = sum(Total_Amount), Count = n()) %>%
+  ungroup()
+
+print(cluster_spending)
+
+# Helps identify whether certain clusters spend more while rating poorly or highly
+ggplot(dataFinal1, aes(x = Cluster, fill = factor(Payment_Method))) +
+  geom_bar(position = "fill") +  # Stacked proportions
+  scale_fill_manual(values = c("#FFABAB", "#85E3FF", "#A3A3F3", "#FFD166")) +
+  labs(title = "Payment Method Preference Across Clusters",
+       x = "Cluster", y = "Proportion", fill = "Payment Method") +
+  theme_minimal()
+
 #deep insight
-install.packages("ClusterR")
-# Extract correct cluster labels
-cluster_labels <- kmeans_result$cluster  # Use "cluster" instead of "Clusters"
+dataFinal1$Payment_Method <- factor(dataFinal1$Payment_Method)  # Convert numeric values to categorical factors
 
-# Create a dataframe with cluster assignments
-data_clustered <- data_cluster %>%
-  as.data.frame() %>%
-  mutate(Cluster = factor(cluster_labels))  # Ensure Cluster is a factor
+payment_spending <- dataFinal1 %>%
+  group_by(Spending_Tier, Payment_Method) %>%
+  summarize(Average_Spend = mean(Total_Amount), Count = n()) %>%
+  ungroup()
 
-# Now visualize clusters using ggplot2
-library(ggplot2)
-ggplot(data_clustered, aes(x = Income, y = Ratings_Num, color = Cluster)) +
-  geom_point(alpha = 0.6) +
-  labs(title = "K-Means Clustering of Customer Ratings",
-       x = "Income Level", y = "Ratings") +
+#declare new column
+payment_usage <- dataFinal1 %>%
+  group_by(Spending_Tier, Payment_Method) %>%
+  summarize(Count = n()) %>%
+  ungroup()
+
+print(payment_usage)
+
+ggplot(payment_usage, aes(x = Spending_Tier, y = Count, fill = factor(Payment_Method))) +
+  geom_bar(stat = "identity", position = "dodge") +  # Dodge for comparison across tiers
+  scale_fill_manual(values = c("#FF6F61", "#6A5ACD", "#FFD166", "#85E3FF")) +
+  labs(title = "Number of Users by Payment Method Across Spending Tiers",
+       x = "Spending Tier", y = "Number of Users", fill = "Payment Method") +
   theme_minimal()
 
-aggregate(cbind(Income, Ratings_Num, Total_Amount) ~ Cluster, data = data_clustered, mean)
 
-ggplot(data_clustered, aes(x = Cluster, fill = factor(Income))) +
-  geom_bar(position = "fill") +
-  labs(title = "Income Distribution Across Clusters",
-       x = "Cluster", y = "Proportion") +
-  theme_minimal()
+chi_payment_spending <- chisq.test(table(dataFinal1$Payment_Method, dataFinal1$Spending_Tier))
+print(chi_payment_spending)
 
-table(data_clustered$Cluster)
+anova_payment_ratings <- aov(Ratings_Num ~ Payment_Method * Spending_Tier, data = dataFinal1)
+summary(anova_payment_ratings)
 
-data_clustered$Ratings_Factor <- cut(data_clustered$Ratings_Num, 
-                                     breaks = 2, 
-                                     labels = c("low", "high"))
+library(caret)
+log_model_refined <- glm(Ratings_Binary ~ Payment_Method + Spending_Tier, family = binomial, data = dataFinal1)
+summary(log_model_refined)
 
-ggplot(data_clustered, aes(x = Cluster, y = Income, fill = Ratings_Factor)) +
-  geom_boxplot(outlier.shape = NA) +  # Hide extreme outliers that might skew results
-  labs(title = "Income Distribution Across Customer Clusters",
-       x = "Cluster", y = "Income Level") +
-  theme_minimal()
+# Check updated accuracy
+predictions_refined <- ifelse(predict(log_model_refined, type = "response") > 0.5, 1, 0)
+confusionMatrix(as.factor(predictions_refined), as.factor(dataFinal1$Ratings_Binary))
 
 #machine learning
 #prepare dataset
+set.seed(123)
+
+# Create 90%-10% split
+trainIndex <- sample(1:nrow(dataFinal1), size = round(0.9 * nrow(dataFinal1)))  
+trainData <- dataFinal1[trainIndex, ]
+testData <- dataFinal1[-trainIndex, ]
+
+summary(trainData[, c("Spending_Tier", "PaymentMethod_Cash", "PaymentMethod_PayPal",
+                      "PaymentMethod_DebitCard", "PaymentMethod_CreditCard")])
+
 library(caret)
 
 # Convert categorical Payment_Method into dummy variables
@@ -179,8 +767,8 @@ set.seed(123)
 subsetIndex <- sample(1:nrow(dataFinal1), size = 15000)  
 dataSubset <- dataFinal1[subsetIndex, ]  # Extract 6000 rows
 
-# Split into 40% train (6000 rows) & 10% test (1500 rows)
-trainIndex <- sample(1:nrow(dataSubset), size = 6000)  
+# Split into 80% train (12000 rows) & 20% test (3000 rows)
+trainIndex <- sample(1:nrow(dataSubset), size = 12000)  
 trainData <- dataSubset[trainIndex, ]
 testData <- dataSubset[-trainIndex, ]
 
@@ -194,14 +782,17 @@ trainData$Total_Amount <- scale(trainData$Total_Amount)
 
 # Convert to matrices for XGBoost
 x_train <- as.matrix(trainData[, c("Income", "Spending_Tier", "Total_Amount", 
-                                   "PaymentMethod_Cash", "PaymentMethod_PayPal", 
-                                   "PaymentMethod_DebitCard", "PaymentMethod_CreditCard")])
+                                   "Total_Purchases", "PaymentMethod_Cash", 
+                                   "PaymentMethod_PayPal", "PaymentMethod_DebitCard", 
+                                   "PaymentMethod_CreditCard")])
 y_train <- trainData$Ratings_Binary
 
 x_test <- as.matrix(testData[, c("Income", "Spending_Tier", "Total_Amount", 
-                                 "PaymentMethod_Cash", "PaymentMethod_PayPal", 
-                                 "PaymentMethod_DebitCard", "PaymentMethod_CreditCard")])
+                                 "Total_Purchases", "PaymentMethod_Cash", 
+                                 "PaymentMethod_PayPal", "PaymentMethod_DebitCard", 
+                                 "PaymentMethod_CreditCard")])
 y_test <- testData$Ratings_Binary
+
 
 
 library(xgboost)
@@ -238,19 +829,21 @@ xgb_model <- xgboost(data = x_train, label = y_train,
                      subsample = 0.8, colsample_bytree = 0.8, 
                      objective = "binary:logistic")
 
-xgb.importance(model = xgb_model)
-
+# Evaluate model performance
 xgb_predictions <- predict(xgb_model, x_test)
 xgb_pred_class <- ifelse(xgb_predictions > 0.5, 1, 0)
+
+confusionMatrix(factor(xgb_pred_class), factor(y_test))
 
 library(caret)
 confusionMatrix(factor(xgb_pred_class), factor(y_test))
 #the end bcs i cannot handle more of it
 
-------------------------------------
-# Does the choice of payment method , total purchases and income level impact customer satisfaction as represented by product ratings?
-#Group customer income levels and calculate average product ratings
-aggregate(Ratings_Num ~ Income, data = dataFinal1, mean)
+
+-------------------------------
+  # Does the choice of payment method , total purchases and income level impact customer satisfaction as represented by product ratings? (analysis question)
+  #Group customer income levels and calculate average product ratings
+  aggregate(Ratings_Num ~ Income, data = dataFinal1, mean)
 
 #Check how ratings vary based on income level and preferred payment method
 aggregate(Ratings_Num ~ Income + Payment_Method, data = dataFinal1, mean)
@@ -283,19 +876,12 @@ dataFinal1 %>%
 
 interaction_model <- lm(Ratings_Num ~ Income * Payment_Method, data = dataFinal1)
 summary(interaction_model)
-
+# start
 library(cluster)
 
 data_cluster <- scale(dataFinal1[, c("Total_Amount", "Total_Purchases", "Ratings_Num")])
 kmeans_result <- kmeans(data_cluster, centers = 3)
 dataFinal1$Cluster <- kmeans_result$cluster
-
-ggplot(dataFinal1, aes(x = Total_Amount, y = Ratings_Num, color = factor(Cluster))) +
-  geom_point(alpha = 0.5) +
-  labs(title = "Customer Clusters Based on Spending & Satisfaction",
-       x = "Total Amount Spent", y = "Product Ratings",
-       color = "Cluster") +
-  theme_minimal()
 
 ggplot(dataFinal1, aes(x = factor(Cluster), y = Total_Amount, fill = factor(Cluster))) +
   geom_boxplot() +
@@ -361,19 +947,29 @@ logit_model <- glm(Satisfied ~ Payment_Method, data = dataFinal1, family = binom
 summary(logit_model)
 
 #more deeper
-# Step 1: Convert Month Names to Numeric Values (Handles Lowercase)
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Ensure Month Names Are Converted Properly (Handles Lowercase)
 dataFinal1$Month <- match(tolower(dataFinal1$Month), tolower(month.name))
 
-# Step 2: Create Year-Month as a Date Format
-dataFinal1$YearMonth <- as.Date(paste(dataFinal1$Year, dataFinal1$Month, "01", sep = "-"), format = "%Y-%m-%d")
+# Step 2: Check for NAs and handle missing values
+dataFinal1 <- dataFinal1 %>%
+  filter(!is.na(Month))  # Remove rows where Month conversion failed
 
-# Step 3: Extract Year-Month for Trend Analysis
+# Step 3: Create Year-Month as a Date Format
+dataFinal1$YearMonth <- as.Date(with(dataFinal1, paste(Year, Month, "01", sep = "-")), "%Y-%m-%d")
+
+# Step 4: Extract Year-Month for Trend Analysis
 dataFinal1$YearMonth <- format(dataFinal1$YearMonth, "%Y-%m")
 
+# Step 5: Group by Year-Month and Payment Method to calculate average ratings
 monthly_ratings <- dataFinal1 %>%
   group_by(YearMonth, Payment_Method) %>%
-  summarize(Average_Rating = mean(Ratings_Num))
+  summarize(Average_Rating = mean(Ratings_Num, na.rm = TRUE))
 
+# Step 6: Plot Monthly Satisfaction Trends by Payment Method
 ggplot(monthly_ratings, aes(x = YearMonth, y = Average_Rating, color = Payment_Method, group = Payment_Method)) +
   geom_line() +
   labs(title = "Monthly Satisfaction Trends by Payment Method",
@@ -381,11 +977,11 @@ ggplot(monthly_ratings, aes(x = YearMonth, y = Average_Rating, color = Payment_M
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-#Test whether month-year trends predict satisfaction, while accounting for payment method
-linear_model <- lm(Average_Rating ~ YearMonth + Payment_Method, data = monthly_ratings)
+# Step 7: Test whether month-year trends predict satisfaction while accounting for payment method
+linear_model <- lm(Average_Rating ~ as.numeric(YearMonth) + Payment_Method, data = monthly_ratings)
 summary(linear_model)
 
-#Gives a clear visual of whether satisfaction ratings increase or decrease over time
+# Step 8: Visualize linear trend of satisfaction
 ggplot(monthly_ratings, aes(x = YearMonth, y = Average_Rating, color = Payment_Method, group = Payment_Method)) +
   geom_line() +
   geom_smooth(method = "lm", se = FALSE) +  
@@ -394,6 +990,7 @@ ggplot(monthly_ratings, aes(x = YearMonth, y = Average_Rating, color = Payment_M
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
+#done
 #end
 --------------------------------------------------------------------------------------------------------------------------------------------
 # Hew Pik Rou - TP071195
