@@ -2,7 +2,26 @@
 data <- read.csv("retail_data.csv")
 View(data)
 
-#Drop 9 columns all together
+library(ggplot2)
+library(reshape2)
+# Count missing values per column
+na_counts <- colSums(is.na(data))
+na_df <- data.frame(Column = names(na_counts), NA_Count = na_counts)
+
+# Plot
+ggplot(na_df, aes(x = reorder(Column, -NA_Count), y = NA_Count)) +
+  geom_bar(stat = "identity", fill = "tomato", alpha = 0.8) +
+  labs(
+    title = "Missing Values in the Orginal Dataset (retail_data)",
+    x = "Variables",
+    y = "Count of Missing Values"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(face = "bold", size = 18, hjust = 0.5)
+        )
+
+--------------------------------------
+# Drop 9 columns all together
 library(dplyr)
 data <- data %>%
   select(-c(Name, Email, Phone, Address, Date, Time, Zipcode, State, City))
@@ -10,7 +29,7 @@ data <- data %>%
 # View the updated data frame
 print(data)
 --------------------------------------
-#Change values in the table to lowercase all together
+# Change values in the table to lowercase all together
 # Using lapply to apply tolower to all character columns in the data frame
 # Apply tolower to all character columns
 data[] <- lapply(data, function(x) {
@@ -29,7 +48,7 @@ print(data)
 # View the updated data frame
 print(data)
 -------------------------------------
-#Remove duplicate data by rows
+# Remove duplicate data by rows
 data <- distinct(data)
 
 # View the updated data frame
@@ -327,9 +346,16 @@ getwd()
 lapply(1:8, function(x) x)
 
 # Combine all chunks into one dataset
+# final_data <- do.call(rbind, lapply(1:8, function(i) {
+#  +   read.csv(paste0("final_dataSet", i, ".csv"))
+#  + }))
+# final_data
+
 final_data <- do.call(rbind, lapply(1:8, function(i) {
-  +   read.csv(paste0("final_dataSet", i, ".csv"))
-  + }))
+  read.csv(paste0("final_dataSet", i, ".csv"))
+}))
+
+# View the combined data
 final_data
 
 # view final_data
@@ -363,8 +389,8 @@ print("New dataset with Customer_ID saved as 'newdata_with_customer_ID.csv'.")
 dataFinal <- read.csv("newdata_with_customer_ID.csv")
 View(dataFinal)
 -------------------------------------------------------------------------------
-# the customerID has NA values
-#impute only customerID, it won't afffect other variable
+# The customerID has NA values
+# Impute only customerID, it won't affect other variable
 library(mice)
 
 # Create a predictor matrix manually
@@ -383,15 +409,43 @@ imputed_data <- mice(dataFinal, method = "pmm", m = 5, maxit = 50, seed = 123, p
 final_data <- complete(imputed_data, action = 1)
 
 # Save the updated dataset with imputed Customer_ID
-write.csv(final_data, "final_data_with_imputed_Customer_ID.csv", row.names = FALSE)
+# write.csv(final_data, "final_data_with_imputed_Customer_ID.csv", row.names = FALSE)
+write.csv(final_data, "cleaned_data.csv", row.names = FALSE)
 
 # View the dataset
 print("Customer_ID has been imputed successfully!")
-#import dataFinal1
-dataFinal1 <- read.csv("final_data_with_imputed_Customer_ID.csv")
+# Import dataFinal1
+# dataFinal1 <- read.csv("final_data_with_imputed_Customer_ID.csv")
+dataFinal1 <- read.csv("cleaned_data.csv")
 View(dataFinal1)
 
-#save the recent dataset into project file
+# Save the recent dataset into project file
 getwd()
 "C:/Users/ELYSHA SOPHIA/OneDrive - Asia Pacific University/Documents/retail-transactional-analysis"
  write.csv(final_data, "C:/Users/ELYSHA SOPHIA/OneDrive - Asia Pacific University/Documents/retail-transactional-analysis/final_data_with_imputed_Customer_ID.csv", row.names = FALSE)
+ 
+# Plot for visualize the cleaned dataset
+library(ggplot2)
+library(tidyverse)
+ 
+# Convert dataset to long format for visualization
+na_data <- dataFinal1 %>%
+  summarise_all(~sum(is.na(.))) %>%
+  pivot_longer(cols = everything(), names_to = "Column", values_to = "NA_Count")
+ 
+na_data$NA_Flag <- ifelse(na_data$NA_Count == 0, "Clean", "Has NA")
+
+ggplot(na_data, aes(x = Column, y = NA_Count, group = 1, color = factor(NA_Count == 0))) +
+  geom_line(size = 1.5) +
+  geom_point(size = 4, shape = 21, fill = "white") +
+  scale_color_manual(values = c("TRUE" = "darkgreen", "FALSE" = "red")) +
+  theme_minimal(base_size = 14) +
+  labs(title = "Missing Values Per Column After Cleaning",
+       subtitle = "Green = No NA values, Red = Columns with Missing Data",
+       x = "Columns",
+       y = "Number of NA Values",
+       color = "Status") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
+        plot.subtitle = element_text(size = 14, hjust = 0.5))
