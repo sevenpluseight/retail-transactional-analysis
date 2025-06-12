@@ -5,7 +5,7 @@
 # 4. the analysis should be meaningful and effective in providing the information for decision-making
 
 # data import (cleaned)
-dataFinal1 <- read.csv("cleaned_data.csv")
+dataFinal1 <- read.csv("datasets/cleaned_data.csv")
 View(dataFinal1)
 
 # required libraries: dplyr, ggplot2, tidyr
@@ -443,33 +443,20 @@ plot_data <- avg_ratings %>%
 ggplot(plot_data_long, aes(y = Subscription, x = Rating_Value, color = Statistic)) +
   geom_point(aes(shape = Statistic), size = 5, alpha = 0.8) +
   geom_line(aes(group = Subscription), color = "gray", linewidth = 0.5, linetype = "dotted") +
-  geom_text(data = filter(plot_data_long, Statistic == "Mean"),
+  geom_text(data = dplyr::filter(plot_data_long, Statistic == "Mean"),
             aes(label = round(Rating_Value, 2)),
             hjust = -0.5, size = 3.5, fontface = "bold", color = "#34495E") +
-  scale_color_manual(values = c("Min" = "#EE6C4D", "Median" = "#2C3E50", "Mean" = "#3D7A9F"),
-                     name = "Rating Statistic") +
-  scale_shape_manual(values = c("Min" = 17, "Median" = 15, "Mean" = 16),
-                     name = "Rating Statistic") +
+  scale_color_manual(values = c("Min" = "#EE6C4D", "Median" = "#2C3E50", "Mean" = "#3D7A9F")) +
+  scale_shape_manual(values = c("Min" = 17, "Median" = 15, "Mean" = 16)) +
   scale_x_continuous(breaks = seq(1, 5, by = 0.5), limits = c(0.8, 5.2), expand = expansion(mult = c(0.05, 0.1))) +
   labs(title = "Rating Distribution by Subscription Status",
        subtitle = "Min, Median, and Mean Customer Ratings per Group",
-       x = "Rating Value", y = "Subscription Status") +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(size = 18, face = "bold", color = "#2C3E50", hjust = 0.5),
-    plot.subtitle = element_text(size = 12, color = "#7F8C8D", hjust = 0.5, margin = margin(b = 20)),
-    axis.title = element_text(size = 14, color = "#34495E"),
-    axis.text.x = element_text(size = 11, color = "#7F8C8D"),
-    axis.text.y = element_text(size = 12, color = "#34495E", face = "bold"),
-    legend.title = element_text(size = 12, color = "#34495E", face = "bold"),
-    legend.text = element_text(size = 11, color = "#7F8C8D"),
-    legend.position = "bottom",
-    panel.grid.major.y = element_blank(), panel.grid.minor.y = element_blank(),
-    panel.grid.major.x = element_line(color = "#ECF0F1", linetype = "dotted"), panel.grid.minor.x = element_blank(),
-    plot.background = element_rect(fill = "#FDFDFD", color = NA), panel.background = element_rect(fill = "#FDFDFD", color = NA),
-    axis.line.x = element_line(color = "#BDC3C7", linewidth = 0.7),
-    plot.margin = unit(c(1, 1, 1, 1), "cm")
-  )
+       x = "Rating Value", y = "Subscription Status",
+       color = "Rating Statistic", shape = "Rating Statistic") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.position = "bottom")
 
 # Perform ANOVA
 anova_results <- aov(Ratings_Num ~ Subscription, data = dataFinal1)
@@ -550,6 +537,14 @@ exp(cbind(OR = coef(logit_model), confint(logit_model)))
 # Subscriptionregular 0.8039256 0.7901721 0.8179107
 # Subscriptionpremium 1.3681255 1.3382828 1.3986617
 
+# Extract odds ratios and confidence intervals
+odds_df <- data.frame(
+  Subscription = c("Intercept (New)", "Regular vs New", "Premium vs New"),
+  OR = exp(coef(logit_model)),  # Odds ratio
+  Lower_CI = exp(confint(logit_model)[,1]),  # Lower confidence interval
+  Upper_CI = exp(confint(logit_model)[,2])   # Upper confidence interval
+)
+
 # Create odds ratio dataframe
 odds_df$Subscription <- factor(odds_df$Subscription,
                                levels = c("Intercept (New)", "Regular vs New", "Premium vs New"))
@@ -563,16 +558,22 @@ odds_df <- odds_df %>%
   ))
 
 # Plot the odds ratios
-ggplot(odds_df, aes(x = OR, y = Subscription)) +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "#E4572E", linewidth = 0.8) +
-  geom_errorbarh(aes(xmin = Lower_CI, xmax = Upper_CI, color = Effect), height = 0.2, linewidth = 1.2) +
-  geom_point(aes(color = Effect), size = 6, shape = 19) +
-  geom_text(aes(label = round(OR, 2)), hjust = -0.5, size = 4, fontface = "bold", color = "#2C3E50") +
+library(forcats)
+ggplot(odds_df %>% arrange(OR), aes(x = OR, y = fct_inorder(Subscription))) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "#E4572E", linewidth = 0.9) +
+  geom_pointrange(aes(xmin = Lower_CI, xmax = Upper_CI, color = Effect),
+                  size = 1.5, linewidth = 1.5,
+                  fatten = 2) +
+  geom_text(aes(label = round(OR, 2)),
+            hjust = -0.3,
+            size = 4.5, fontface = "bold", color = "#2C3E50") +
   scale_color_manual(values = c("Increased Odds" = "#2CA4B0", "Decreased Odds" = "#EE6C4D", "No Significant Effect" = "#8D99AE")) +
-  scale_x_continuous(breaks = seq(0.5, max(odds_df$Upper_CI) * 1.1, by = 0.25), limits = c(min(odds_df$Lower_CI) * 0.9, max(odds_df$Upper_CI) * 1.1)) +
+  scale_x_continuous(breaks = seq(0, max(odds_df$Upper_CI) * 1.1, by = 0.5),
+                     limits = c(min(0.1, odds_df$Lower_CI) * 0.9, max(odds_df$Upper_CI) * 1.2),
+                     trans = "log10") +
   labs(title = "Likelihood of High Ratings Across Subscription Groups",
-       subtitle = "Odds Ratios and 95% Confidence Intervals relative to 'New' subscribers",
-       x = "Odds Ratio (OR)", y = "Subscription Comparison") +
+       subtitle = "Odds Ratios (relative to 'New' subscribers) and 95% Confidence Intervals",
+       x = "Odds Ratio (OR) [Log Scale]", y = "Subscription Comparison") +
   theme_minimal(base_size = 12) +
   theme(
     plot.title = element_text(size = 18, face = "bold", color = "#2C3E50", hjust = 0.5),
@@ -590,8 +591,26 @@ ggplot(odds_df, aes(x = OR, y = Subscription)) +
     plot.margin = unit(c(1, 1, 1, 1), "cm")
   )
 
+library(pROC)
+# Compute predicted probabilities from logistic regression model
+dataFinal1$Predicted_Prob <- predict(logit_model, type = "response")
+
+# Generate ROC curve
+roc_curve <- roc(dataFinal1$High_Rating, dataFinal1$Predicted_Prob)
+
+# Plot ROC curve
+plot(roc_curve, col = "#2CA4B0", lwd = 3, main = "ROC Curve for Subscription-Based Ratings Prediction")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+# Print AUC (Area Under Curve) for model evaluation - 0.5522
+auc(roc_curve)
+
+--------------------------------------------------------------------------------
 # analysis 2 - Are subscribed customers more likely to leave higher ratings through feedback compared to non-subscribed customers?
 # Create count of high ratings per subscription group
+dataFinal1$High_Rating <- ifelse(dataFinal1$Ratings_Num == 5, 1, 
+                                  ifelse(dataFinal1$Ratings_Num == 1, 0, NA))
+
 prop_data <- table(dataFinal1$Subscription, dataFinal1$High_Rating)
 
 # Run two-proportion Z-test
@@ -600,34 +619,41 @@ print(prop_data)
 prop_test <- prop.test(x = prop_data[,2], n = rowSums(prop_data))
 print(prop_test)
 
-# Convert table data into a dataframe
-prop_df <- as.data.frame(prop_data)
-colnames(prop_df) <- c("Subscription", "Rating", "Count")
+# Calculate proportions within each Subscription group
+prop_df_proportions <- prop_df %>%
+  group_by(Subscription) %>%
+  mutate(Percentage = Count / sum(Count) * 100) %>%
+  ungroup()
 
-prop_df$Rating <- factor(prop_df$Rating, levels = c("0", "1"), labels = c("Low Rating (0)", "High Rating (1)"))
-
-# Plot proportion of high ratings by subscription type
-ggplot(prop_df, aes(x = Subscription, y = Count, fill = Rating)) +
-  geom_bar(stat = "identity", position = "fill", width = 0.7) +
-  geom_text(aes(label = percent(Count / tapply(Count, Subscription, sum)[Subscription], accuracy = 1)),
-            position = position_fill(vjust = 0.5), size = 3.5, fontface = "bold", color = "white") +
-  scale_fill_manual(values = c("Low Rating (0)" = "#EE6C4D", "High Rating (1)" = "#3D7A9F"), name = "Rating Category") +
-  scale_y_continuous(labels = percent_format(accuracy = 1)) +
-  labs(title = "Proportion of High vs. Low Ratings by Subscription Type",
-       subtitle = "Analysis of feedback categories across customer groups",
-       x = "Subscription Type", y = "Proportion of Ratings") +
+# Plot for visualizing the proportion of high vs. low ratings by subscription
+ggplot(prop_df_proportions, aes(x = Subscription, y = Percentage, fill = factor(High_Rating))) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7, color = "white", linewidth = 0.5) +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")),
+            position = position_stack(vjust = 0.5),
+            size = 4, fontface = "bold", color = "white") +
+  scale_fill_manual(values = c("0" = "grey", "1" = "blue"),
+                    labels = c("Low Rating", "High Rating"),
+                    name = "Rating Type") +
+  labs(title = "Proportion of High vs. Low Ratings by Subscription Group",
+       subtitle = "Percentage of ratings in each category per subscription type",
+       x = "Subscription Status",
+       y = "Percentage of Ratings") +
   theme_minimal(base_size = 12) +
   theme(
     plot.title = element_text(size = 18, face = "bold", color = "#2C3E50", hjust = 0.5),
     plot.subtitle = element_text(size = 12, color = "#7F8C8D", hjust = 0.5, margin = margin(b = 20)),
-    axis.title = element_text(size = 13, color = "#34495E"),
-    axis.text = element_text(size = 11, color = "#7F8C8D"),
+    axis.title = element_text(size = 14, color = "#34495E"),
+    axis.text.x = element_text(size = 12, color = "#34495E", face = "bold"),
+    axis.text.y = element_text(size = 11, color = "#7F8C8D"),
+    legend.position = "bottom",
     legend.title = element_text(size = 12, color = "#34495E", face = "bold"),
     legend.text = element_text(size = 11, color = "#7F8C8D"),
-    legend.position = "bottom",
-    panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(),
-    panel.grid.major.y = element_line(color = "#ECF0F1", linetype = "dotted"), panel.grid.minor.y = element_blank(),
-    plot.background = element_rect(fill = "#FDFDFD", color = NA), panel.background = element_rect(fill = "#FDFDFD", color = NA),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_line(color = "#ECF0F1", linetype = "dotted"),
+    panel.grid.minor.y = element_blank(),
+    plot.background = element_rect(fill = "#FDFDFD", color = NA),
+    panel.background = element_rect(fill = "#FDFDFD", color = NA),
     axis.line.x = element_line(color = "#BDC3C7", linewidth = 0.7),
     plot.margin = unit(c(1, 1, 1, 1), "cm")
   )
@@ -640,39 +666,56 @@ feedback_table <- table(dataFinal1$Subscription, dataFinal1$Feedback)
 chisq_test <- chisq.test(feedback_table)
 print(chisq_test)
 
-feedback_df <- feedback_df %>%
+feedback_df <- dataFinal1 %>%
+  select(Subscription, Feedback) %>%
   mutate(
     # Create a new column 'Feedback_Category' by remapping the original 'Feedback' values
     Feedback_Category = case_when(
       Feedback == "bad" ~ "Negative",
       Feedback == "average" ~ "Neutral",
-      Feedback %in% c("good", "excellent") ~ "Positive", # Group 'good' and 'excellent' into 'Positive'
+      Feedback %in% c("good", "excellent") ~ "Positive",
       TRUE ~ NA_character_
     )
   ) %>%
   mutate(
     Feedback_Category = factor(Feedback_Category, levels = c("Negative", "Neutral", "Positive"))
-  )
+  ) %>%
+  group_by(Subscription, Feedback_Category) %>%
+  summarise(Count = n(), .groups = 'drop') %>% # Count occurrences and drop grouping
+  ungroup() # Remove grouping structure for subsequent operations
 
 # Plot feedback distributions
+library(scales)
 ggplot(feedback_df, aes(x = Subscription, y = Count, fill = Feedback_Category)) +
-  geom_bar(stat = "identity", position = "fill", width = 0.8) +
+  geom_bar(stat = "identity", position = "fill", width = 0.8, color = "white", linewidth = 0.5) +
   geom_text(aes(label = percent(Count / tapply(Count, Subscription, sum)[Subscription], accuracy = 1)),
-            position = position_fill(vjust = 0.5), size = 3.5, fontface = "bold", color = "white") +
+            position = position_fill(vjust = 0.5), size = 4, fontface = "bold", color = "white") +
   scale_fill_manual(values = c("Negative" = "#EE6C4D", "Neutral" = "#FFD23F", "Positive" = "#3D7A9F")) +
   scale_y_continuous(labels = percent_format()) +
   labs(
     title = "Feedback Distribution by Subscription Type",
+    subtitle = "Proportion of Negative, Neutral, and Positive Feedback per Group",
     x = "Subscription Type",
     y = "Proportion of Feedback",
     fill = "Feedback Category"
   ) +
-  theme_minimal() +
+  theme_minimal(base_size = 12) +
   theme(
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    axis.title = element_text(size = 11),
-    axis.text = element_text(size = 9),
-    legend.position = "bottom"
+    plot.title = element_text(size = 18, face = "bold", color = "#2C3E50", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "#7F8C8D", hjust = 0.5, margin = margin(b = 20)),
+    axis.title = element_text(size = 14, color = "#34495E"),
+    axis.text.x = element_text(size = 12, color = "#34495E", face = "bold"),
+    axis.text.y = element_text(size = 11, color = "#7F8C8D"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 12, color = "#34495E", face = "bold"),
+    legend.text = element_text(size = 11, color = "#7F8C8D"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_line(color = "#ECF0F1", linetype = "dotted"),
+    panel.grid.minor.y = element_blank(),
+    plot.background = element_rect(fill = "#FDFDFD", color = NA),
+    panel.background = element_rect(fill = "#FDFDFD", color = NA),
+    plot.margin = unit(c(1, 1, 1, 1), "cm")
   )
 
 # Identify first year of customer engagement
@@ -688,23 +731,28 @@ cohort_trends <- dataFinal1 %>%
 print(cohort_trends)
 
 # Prediction - are subscribed customers more likely to give high ratings through feedback compared to non-subscribed customers in the future
-library(smotefamily)
 library(xgboost)
 library(caret)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
 # Convert feedback labels to numerical values
-dataFinal1$Feedback_Num <- as.numeric(factor(dataFinal1$Feedback, levels = c("bad", "average", "good", "excellent"), labels = c(1, 2, 3, 4)))
+dataFinal1$Feedback_Num <- as.numeric(factor(dataFinal1$Feedback, 
+                                             levels = c("bad", "average", "good", "excellent"), 
+                                             labels = c(1, 2, 3, 4)))
 
 # Select relevant features
-feature_columns <- c("Subscription", "Income", "Total_Purchases", "Product_Category", "Order_Status", "Ratings_Num", "Year", "Month", "Shipping_Method", "Product_Brand")
+feature_columns <- c("Subscription", "Income", "Total_Purchases", "Product_Category", 
+                     "Order_Status", "Ratings_Num", "Year", "Month", "Shipping_Method", "Product_Brand")
 dataFinal1_selected <- dataFinal1[, feature_columns]
 
 # Convert categorical variables to numeric (one-hot encoding)
 dummy_vars <- dummyVars(~ ., data = dataFinal1_selected, fullRank = TRUE)
 dataFinal1_processed <- predict(dummy_vars, newdata = dataFinal1_selected)
-
 colnames(dataFinal1_processed) <- make.names(colnames(dataFinal1_processed), unique = TRUE)
 
-# Divide the dateset into training (70%) and testing (30%)
+# Divide the dataset into training (70%) and testing (30%)
 set.seed(123)
 trainIndex <- createDataPartition(dataFinal1$Feedback_Num, p = 0.7, list = FALSE)
 trainData <- dataFinal1_processed[trainIndex, ]
@@ -713,15 +761,7 @@ testData <- dataFinal1_processed[-trainIndex, ]
 trainLabels <- dataFinal1$Feedback_Num[trainIndex]
 testLabels <- dataFinal1$Feedback_Num[-trainIndex]
 
-table(trainLabels)
-# results:
-# 1 - 30389
-# 2 - 43846
-# 3 - 66594
-# 4 - 70572
-
 # Apply oversampling to balance feedback categories
-# Convert trainLabels to a factor
 trainData <- as.data.frame(trainData)
 trainLabels <- as.factor(trainLabels)
 trainData$class <- trainLabels
@@ -729,23 +769,29 @@ trainData$class <- trainLabels
 # Apply oversampling
 trainData_balanced <- upSample(x = trainData, y = trainData$class)
 
-# Check the dataset after SMOTE - 1, 2, 3, 4 - 70572
+# Check the dataset after oversampling - 1, 2, 3, 4: 70572
 table(trainData_balanced$class)
 
 # Ensure all columns are numeric
 testData <- as.data.frame(testData)
 testData[] <- lapply(testData, as.numeric)
 
-# Ensure trainData is numeric
-trainData <- as.data.frame(trainData)
+# Convert all column names to lowercase to ensure consistency
+colnames(trainData_balanced) <- tolower(colnames(trainData_balanced))
+colnames(testData) <- tolower(colnames(testData))
+
+# Remove 'class' column before creating trainData
+trainData <- trainData_balanced[, !colnames(trainData_balanced) %in% "class"]
 trainData[] <- lapply(trainData, as.numeric)
 
-# Convert into XGBoost format
-trainMatrix <- xgb.DMatrix(data = as.matrix(trainData), label = trainLabels)
-testMatrix <- xgb.DMatrix(data = as.matrix(testData), label = testLabels)
+# Ensure testData structure matches trainData
+missing_cols <- setdiff(colnames(trainData), colnames(testData))
+testData[missing_cols] <- 0  # Add missing columns with default value
+testData <- testData[, colnames(trainData)]  # Match column order
 
-trainLabels <- trainLabels[1:nrow(trainData)]
-testLabels <- testLabels[1:nrow(testData)]
+# Convert into XGBoost format
+trainMatrix <- xgb.DMatrix(data = as.matrix(trainData), label = as.numeric(as.character(trainData_balanced$class)))
+testMatrix <- xgb.DMatrix(data = as.matrix(testData), label = testLabels)
 
 # Define XGBoost parameters
 params <- list(
@@ -762,8 +808,24 @@ params <- list(
 # Train XGBoost model
 xgb_model_optimized <- xgb.train(params = params, data = trainMatrix, nrounds = 1000)
 
+# Feature Importance Analysis
+importance <- xgb.importance(model = xgb_model_optimized)
+print(importance)
+# Top 7 feature importance analysis
+# 1:                    ratings_num 9.535082e-01 0.106572304 0.007844297
+# 2:         product_brandwhirlpool 6.165025e-03 0.056769790 0.009884208
+# 3:             product_brandpepsi 4.252880e-03 0.056122862 0.023601872
+# 4:        product_brandmitsubishi 4.008055e-03 0.053581309 0.008573540
+# 5:                       monthmay 3.770792e-03 0.053443765 0.016309436
+# 6:                    monthaugust 3.711088e-03 0.085083748 0.019512195
+# 7:            subscriptionpremium 3.210237e-03 0.041577385 0.030766199
+
 # Predict feedback ratings on test data
 predictions_optimized <- predict(xgb_model_optimized, testMatrix)
+
+# Save the trained model into an .rds file
+saveRDS(xgb_model_optimized, file = "saved_models/Hew_Pik_Rou/analysis2_xgb_model.rds")
+xgb_model <- readRDS("saved_models/Hew_Pik_Rou/analysis2_xgb_model.rds") # Read when needed
 
 # Evaluate model performance
 library(Metrics)
@@ -773,11 +835,17 @@ rmse_score <- rmse(testLabels, predictions_optimized)
 print(paste("Mean Absolute Error (MAE):", round(mae_score, 2)))
 print(paste("Root Mean Squared Error (RMSE):", round(rmse_score, 2)))
 
-# Print first few predicted values vs actual ratings
+# Round predicted values
 results_df <- data.frame(Actual = testLabels, Predicted = round(predictions_optimized, 2))
+results_df$Predicted <- round(results_df$Predicted)
+
+# Compute confusion matrix - 0.6074
+confusionMatrix(as.factor(results_df$Predicted), as.factor(results_df$Actual))
+
+# Print first few predicted values vs actual ratings
 head(results_df)
 
-# Count correctly predicted ratings - 62.11%
+# Count correctly predicted ratings - 60.59%
 correct_predictions <- sum(round(predictions_optimized) == testLabels)
 accuracy_rate <- correct_predictions / length(testLabels)
 print(paste("Prediction Accuracy:", round(accuracy_rate * 100, 2), "%"))
@@ -787,76 +855,139 @@ month_labels <- c("January", "February", "March", "April", "May", "June",
                   "July", "August", "September", "October", "November", "December"
                   )
 
-library(caret)
 # Convert predicted values to nearest integer ratings
 rounded_predictions <- round(predictions_optimized)
 
-# Generate confusion matrix
-conf_matrix <- confusionMatrix(factor(rounded_predictions), factor(testLabels))
-print(conf_matrix)
+# Convert test labels and predictions to factors with consistent levels
+rounded_predictions <- factor(rounded_predictions, levels = c(1, 2, 3, 4))
+testLabels <- factor(testLabels, levels = c(1, 2, 3, 4))
 
-sensitivity(conf_matrix$table, positive = "4")
+# Create a mapping rule for subscription categories
+dataFinal1$Subscription_Status <- ifelse(dataFinal1$Subscription %in% c("premium", "regular"), "Subscribed", "Non-Subscribed")
 
-conf_matrix_subscribed <- confusionMatrix(factor(rounded_predictions[results_df$Subscription_Status == "Subscribed"]), factor(testLabels[results_df$Subscription_Status == "Subscribed"]))
-conf_matrix_nonsubscribed <- confusionMatrix(factor(rounded_predictions[results_df$Subscription_Status == "Non-Subscribed"]), factor(testLabels[results_df$Subscription_Status == "Non-Subscribed"]))
-
-sensitivity_subscribed <- sensitivity(conf_matrix_subscribed$table, positive = "4")
-sensitivity_nonsubscribed <- sensitivity(conf_matrix_nonsubscribed$table, positive = "4")
-
-print(paste("Sensitivity (Subscribed):", round(sensitivity_subscribed, 2)))
-print(paste("Sensitivity (Non-Subscribed):", round(sensitivity_nonsubscribed, 2)))
-
-# Ensure testIndex is defined
-testIndex <- setdiff(1:nrow(dataFinal1), trainIndex)
-
+# Create results_df with Subscription_Status included
 results_df <- data.frame(
   Actual = testLabels,
-  Predicted = round(predictions_optimized, 2),
+  Predicted = rounded_predictions,
   Month = dataFinal1$Month[testIndex],
-  Subscription_Status = dataFinal1$Subscription[testIndex]
+  Subscription_Status = dataFinal1$Subscription_Status[testIndex]
 )
 
-results_df <- results_df %>%
+# Generate overall confusion matrix - 0.6059
+conf_matrix <- confusionMatrix(rounded_predictions, testLabels)
+print(conf_matrix)
+
+# Compute specificity for subscribed and non-subscribed customers
+subscribed_indices <- which(results_df$Subscription_Status == "Subscribed")
+nonsubscribed_indices <- which(results_df$Subscription_Status == "Non-Subscribed")
+
+conf_matrix_subscribed <- confusionMatrix(
+  factor(rounded_predictions[subscribed_indices], levels = levels(testLabels)), 
+  factor(testLabels[subscribed_indices], levels = levels(testLabels))
+)
+
+conf_matrix_nonsubscribed <- confusionMatrix(
+  factor(rounded_predictions[nonsubscribed_indices], levels = levels(testLabels)), 
+  factor(testLabels[nonsubscribed_indices], levels = levels(testLabels))
+)
+
+# Compute specificity for each class (1 to 4)
+specificity_scores_subscribed <- sapply(levels(testLabels), function(class) {
+  specificity(conf_matrix_subscribed$table, negative = class)
+})
+
+specificity_scores_nonsubscribed <- sapply(levels(testLabels), function(class) {
+  specificity(conf_matrix_nonsubscribed$table, negative = class)
+})
+
+print(specificity_scores_subscribed)
+# 1 - 0.6811992
+# 2 - 0.4765286
+# 3 - 0.7233101
+# 4 - 0.5526149
+
+print(specificity_scores_nonsubscribed)
+# 1 - 0.6954143
+# 2 - 0.4303659
+# 3 - 0.6257275
+# 4 - 0.6296258
+
+test_original_subscriptions <- dataFinal1$Subscription[-trainIndex] # Get original Subscription for test data
+
+results_df_cleaned <- results_df %>%
   mutate(
-    Month = factor(tolower(Month), levels = tolower(month_labels), labels = month_labels),
-    Subscription_Status = factor(
-      tolower(Subscription_Status),
-      levels = c("new", "regular", "premium"),
-      labels = c("Non-Subscribed", "Subscribed", "Subscribed")
-    )
+    # Make sure Predicted_Rating_Num is numeric for calculations
+    Predicted_Rating_Num = as.numeric(as.character(Predicted)),
+    # Re-factor Month with the global month_labels for correct order
+    Month = factor(Month, levels = month_labels),
+    # Assign Subscription_Status correctly for the test set
+    Subscription_Status = ifelse(test_original_subscriptions %in% c("premium", "regular"), "Subscribed", "Non-Subscribed"),
+    # Convert to factor with explicit levels for consistent plotting and legend order
+    Subscription_Status = factor(Subscription_Status, levels = c("Non-Subscribed", "Subscribed"))
   )
 
-results_df <- results_df %>%
-  mutate(Customer_Type = Subscription_Status)
+# Calculate the average predicted rating per month per customer type
+average_predicted_ratings_monthly <- results_df_cleaned %>%
+  group_by(Month, Subscription_Status) %>%
+  summarise(
+    Avg_Predicted_Rating = mean(Predicted_Rating_Num),
+    .groups = 'drop'
+  ) %>%
+  ungroup()
+
+# Identify the month(s) with the highest average predicted rating for each customer type
+highest_rating_months <- average_predicted_ratings_monthly %>%
+  group_by(Subscription_Status) %>%
+  filter(Avg_Predicted_Rating == max(Avg_Predicted_Rating)) %>%
+  ungroup()
+
+# Construct the dynamic subtitle string
+subtitle_text <- highest_rating_months %>%
+  rowwise() %>%
+  mutate(info = paste0(Subscription_Status, ": ", Month, " (Avg. Rating: ", round(Avg_Predicted_Rating, 2), ")")) %>%
+  ungroup() %>%
+  pull(info) %>%
+  paste(collapse = " | ")
+
+full_subtitle <- paste0("Months with highest predicted ratings are marked with a star (*). \n",
+                        "Highest predicted ratings: ", subtitle_text)
 
 # Plot for visualizing comparison of actual vs. predicted feedback ratings in the future
-ggplot(results_df, aes(x = Month, group = Customer_Type)) +
-  geom_line(aes(y = Actual, color = "Actual"), size = 1.2) +
-  geom_point(aes(y = Actual, color = "Actual"), size = 2, alpha = 0.8) +
-  geom_line(aes(y = Predicted, color = "Predicted", linetype = "Predicted"), size = 1.2) +
-  geom_ribbon(aes(ymin = pmin(Actual, Predicted), ymax = pmax(Actual, Predicted)),
-              fill = "red", alpha = 0.2) +
-  scale_color_manual(values = c("Actual" = "steelblue", "Predicted" = "darkorange")) +
-  scale_linetype_manual(values = c("Predicted" = "dashed")) +
-  facet_wrap(~ Customer_Type, ncol = 1) +
-  theme_minimal() +
+library(scales)
+ggplot(average_predicted_ratings_monthly, aes(x = Month, y = Avg_Predicted_Rating, color = Subscription_Status, group = Subscription_Status)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_point(data = highest_rating_months, aes(x = Month, y = Avg_Predicted_Rating, color = Subscription_Status),
+             shape = 8, size = 6, stroke = 1.5) +
+  scale_color_manual(values = c("Subscribed" = "#4CAF50", "Non-Subscribed" = "#FF9800")) +
+  scale_y_continuous(breaks = seq(1, 4, by = 0.25), limits = c(min(average_predicted_ratings_monthly$Avg_Predicted_Rating)*0.95, 4.1)) +
   labs(
-    title = "Comparison: Actual vs Predicted Ratings",
-    subtitle = "Differences between Actual and Predicted Ratings for Customer Types",
+    title = "Predicted Average Customer Rating Trend Over Months",
+    subtitle = full_subtitle,
     x = "Month",
-    y = "Feedback Ratings",
-    color = "Rating Type",
-    linetype = "Line Type"
+    y = "Average Predicted Rating",
+    color = "Customer Type"
   ) +
+  theme_minimal(base_size = 12) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold", size = 16),
-    plot.subtitle = element_text(size = 12),
-    strip.text = element_text(face = "bold"),
-    legend.key = element_rect(fill = "white", color = NA),
-    legend.position = "bottom"
+    plot.title = element_text(size = 18, face = "bold", color = "#2C3E50", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, color = "#7F8C8D", hjust = 0.5, margin = margin(b = 20)),
+    axis.title = element_text(size = 14, color = "#34495E"),
+    axis.text.x = element_text(size = 11, color = "#7F8C8D", angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 11, color = "#7F8C8D"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 12, color = "#34495E", face = "bold"),
+    legend.text = element_text(size = 11, color = "#7F8C8D"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_line(color = "#ECF0F1", linetype = "dotted"),
+    panel.grid.minor.y = element_blank(),
+    plot.background = element_rect(fill = "#FDFDFD", color = NA),
+    panel.background = element_rect(fill = "#FDFDFD", color = NA),
+    plot.margin = unit(c(1, 1, 1, 1), "cm")
   )
 
+--------------------------------------------------------------------------------
 # analysis 3 - How does subscribed status influence ratings when combined with factors like shipping methods, payment methods and order status?
 # Check basic statistics for each factor
 summary(dataFinal1[, c("Subscription", "Shipping_Method", "Payment_Method", "Order_Status", "Ratings_Num")])
@@ -1030,7 +1161,7 @@ print(specificity_xgb)  # Specificity score for rating '0'
 
 # Plots
 # Ensure Metric is a factor for proper ordering.
-model_comparison_long$Metric <- factor(model_comparison_long$Metric, levels = c("Accuracy",                                            "Sensitivity", "Specificity"))
+model_comparison_long$Metric <- factor(model_comparison_long$Metric, levels = c("Accuracy", "Sensitivity", "Specificity"))
 
 # Plot for visualizing the comparison between Random Forest vs. XGBoost
 library(scales)
@@ -1371,16 +1502,10 @@ train_data <- data_ml[train_index, ]
 test_data <- data_ml[-train_index, ]
 
 library(randomForest)
-# Train the model
+# Train the model with 100 trees
 rf_model <- randomForest(Ratings_Num ~ Gender + Age + Subscription + Income,
-                         data = train_data, ntree = 300, importance = TRUE)
+                         data = train_data, ntree = 500, importance = TRUE)
 print(rf_model)
-
-tuned_rf <- tuneRF(train_data[, -which(names(train_data) == "Rating_Class")], 
-                   train_data$Rating_Class, 
-                   ntreeTry = 500, 
-                   stepFactor = 1.5, 
-                   improve = 0.01)
 
 # Make predictions
 predicted_ratings <- predict(rf_model, test_data)
@@ -1389,16 +1514,35 @@ predicted_ratings <- predict(rf_model, test_data)
 cor(test_data$Ratings_Num, predicted_ratings)  # Check correlation between actual vs. predicted ratings
 
 library(caret)
-# Convert predicted labels to match test data factor levels
-predicted_class <- factor(predicted_class, levels = levels(test_data$Rating_Class))
+# Predict rating categories
+predicted_class <- predict(rf_model, test_data)
 
-# Compute confusion matrix without errors
+# Compute confusion matrix
 conf_matrix <- confusionMatrix(predicted_class, test_data$Rating_Class)
 
-# Print Accuracy, Sensitivity, Specificity
-print(conf_matrix$overall["Accuracy"])
-print(conf_matrix$byClass["Sensitivity"])
-print(conf_matrix$byClass["Specificity"])
+# Extract metrics
+print(conf_matrix$overall["Accuracy"])  # Overall model accuracy
+print(conf_matrix$byClass["Sensitivity"])  # Ability to detect High ratings
+print(conf_matrix$byClass["Specificity"])  # Ability to detect Low ratings
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # 3. How do demographic factors like age and gender correlate with purchasing behavior (e.g., Total_Purchases, Total_Amount) and subsequent ratings?
 --------------------------------------------------------------------------------------------------------------------------------------------
