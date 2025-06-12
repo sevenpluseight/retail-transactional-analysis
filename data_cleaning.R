@@ -81,8 +81,8 @@ unique(data$Gender)
 # income
 unique(data$Income)
 # customer segment
-  # Rename the 'Customer_Segment' column to 'Subscription'
-  colnames(data)[colnames(data) == "Customer_Segment"] <- "Subscription"
+# Rename the 'Customer_Segment' column to 'Subscription'
+colnames(data)[colnames(data) == "Customer_Segment"] <- "Subscription"
 # year
   unique(data$Year)
 # month
@@ -229,20 +229,20 @@ unique(data$products)
 # install mice
 install.packages("mice")
 
-#check the data format
-#transactionID & customerID consider not meaningful for imputation = drop the columns
+# Check the data format
+# transactionID & customerID consider not meaningful for imputation = drop the columns
 data <- data %>%
   select(-Transaction_ID, -Customer_ID)
-#Use the cor() function to check if any columns are perfectly correlated:
+# Use the cor() function to check if any columns are perfectly correlated:
 correlation_matrix <- cor(numeric_data, use = "pairwise.complete.obs")
 print(correlation_matrix)
-#Identify and remove columns with too many missing values or no variability:
+# Identify and remove columns with too many missing values or no variability:
 # Remove constant columns
 data <- data[, sapply(data, function(x) length(unique(x)) > 1)]
 # Remove columns with excessive missing values
 data <- data[, colMeans(is.na(data)) < 0.9]
 
-#filter numeric columns
+# Filter numeric columns
 # Select only numeric columns
 numeric_data <- data[, sapply(data, is.numeric)] #then return to the cor() function
 
@@ -251,7 +251,6 @@ summary(data)
 
 
 #Imputation process
-# Assuming your dataset is named 'data'
 half_size <- nrow(data) / 2
 first_half <- data[1:half_size, ]  # First half
 second_half <- data[(half_size + 1):nrow(data), ]  # Second half
