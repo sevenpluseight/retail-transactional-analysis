@@ -2,27 +2,35 @@
 data <- read.csv("retail_data.csv")
 View(data)
 
+# required library: ggplot2, dplyr, scales, mice, tidyr
 library(ggplot2)
-library(reshape2)
-# Count missing values per column
-na_counts <- colSums(is.na(data))
-na_df <- data.frame(Column = names(na_counts), NA_Count = na_counts)
+library(dplyr)
+library(scales)
+library(tidyr)
 
-# Plot
+# Count missing values for all columns
+na_counts <- colSums(is.na(data))
+na_df <- data.frame(Column = names(na_counts), NA_Count = na_counts) %>%
+  arrange(desc(NA_Count))
+
+# Plot for visualizing the missing values for all columns
 ggplot(na_df, aes(x = reorder(Column, -NA_Count), y = NA_Count)) +
-  geom_bar(stat = "identity", fill = "tomato", alpha = 0.8) +
+  geom_bar(stat = "identity", fill = "#3D7A9F") +
+  geom_text(aes(label = scales::comma(NA_Count)), vjust = -0.5, size = 3.5) +
   labs(
-    title = "Missing Values in the Orginal Dataset (retail_data)",
-    x = "Variables",
+    title = "Missing Values in the original dataset (retail_data)",
+    x = "Variable",
     y = "Count of Missing Values"
   ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(face = "bold", size = 18, hjust = 0.5)
-        )
-
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
 --------------------------------------
 # Drop 9 columns all together
-library(dplyr)
 data <- data %>%
   select(-c(Name, Email, Phone, Address, Date, Time, Zipcode, State, City))
 
@@ -73,8 +81,8 @@ unique(data$Gender)
 # income
 unique(data$Income)
 # customer segment
-  # Rename the 'Customer_Segment' column to 'Subscription'
-  colnames(data)[colnames(data) == "Customer_Segment"] <- "Subscription"
+# Rename the 'Customer_Segment' column to 'Subscription'
+colnames(data)[colnames(data) == "Customer_Segment"] <- "Subscription"
 # year
   unique(data$Year)
 # month
@@ -219,22 +227,22 @@ unique(data$products)
 
 ------------------------------------------------------
 # install mice
-  install.packages("mice")
+install.packages("mice")
 
-#check the data format
-#transactionID & customerID consider not meaningful for imputation = drop the columns
+# Check the data format
+# transactionID & customerID consider not meaningful for imputation = drop the columns
 data <- data %>%
   select(-Transaction_ID, -Customer_ID)
-#Use the cor() function to check if any columns are perfectly correlated:
+# Use the cor() function to check if any columns are perfectly correlated:
 correlation_matrix <- cor(numeric_data, use = "pairwise.complete.obs")
 print(correlation_matrix)
-#Identify and remove columns with too many missing values or no variability:
+# Identify and remove columns with too many missing values or no variability:
 # Remove constant columns
 data <- data[, sapply(data, function(x) length(unique(x)) > 1)]
 # Remove columns with excessive missing values
 data <- data[, colMeans(is.na(data)) < 0.9]
 
-#filter numeric columns
+# Filter numeric columns
 # Select only numeric columns
 numeric_data <- data[, sapply(data, is.numeric)] #then return to the cor() function
 
@@ -243,7 +251,6 @@ summary(data)
 
 
 #Imputation process
-# Assuming your dataset is named 'data'
 half_size <- nrow(data) / 2
 first_half <- data[1:half_size, ]  # First half
 second_half <- data[(half_size + 1):nrow(data), ]  # Second half
@@ -296,7 +303,7 @@ write.csv(final_data02, "final_data02.csv", row.names = FALSE)
 print(final_data02)
 ------------------------------------------------------------------------------------
 #used chunk
-  library(mice)
+library(mice)
 
 # Function to process a single chunk
 process_chunk <- function(chunk, file_name) {
@@ -425,27 +432,26 @@ getwd()
  write.csv(final_data, "C:/Users/ELYSHA SOPHIA/OneDrive - Asia Pacific University/Documents/retail-transactional-analysis/final_data_with_imputed_Customer_ID.csv", row.names = FALSE)
  
 # Plot for visualize the cleaned dataset
-library(ggplot2)
-library(tidyverse)
+# Prepare data: count NAs and add status flag
+na_data_cleaned <- dataFinal1 %>%
+   summarise(across(everything(), ~sum(is.na(.)))) %>%
+   pivot_longer(cols = everything(), names_to = "Column", values_to = "NA_Count") %>%
+   mutate(NA_Status = ifelse(NA_Count == 0, "Clean (0 NAs)", "Has NAs")) %>%
+   arrange(desc(NA_Status), desc(NA_Count))
+ na_data_cleaned$Column <- factor(na_data_cleaned$Column, levels = na_data_cleaned$Column)
  
-# Convert dataset to long format for visualization
-na_data <- dataFinal1 %>%
-  summarise_all(~sum(is.na(.))) %>%
-  pivot_longer(cols = everything(), names_to = "Column", values_to = "NA_Count")
- 
-na_data$NA_Flag <- ifelse(na_data$NA_Count == 0, "Clean", "Has NA")
-
-ggplot(na_data, aes(x = Column, y = NA_Count, group = 1, color = factor(NA_Count == 0))) +
-  geom_line(size = 1.5) +
-  geom_point(size = 4, shape = 21, fill = "white") +
-  scale_color_manual(values = c("TRUE" = "darkgreen", "FALSE" = "red")) +
-  theme_minimal(base_size = 14) +
-  labs(title = "Missing Values Per Column After Cleaning",
-       subtitle = "Green = No NA values, Red = Columns with Missing Data",
-       x = "Columns",
-       y = "Number of NA Values",
-       color = "Status") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
-        axis.text.y = element_text(size = 12),
-        plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
-        plot.subtitle = element_text(size = 14, hjust = 0.5))
+ggplot(na_data_cleaned, aes(x = Column, y = NA_Count, group = 1, color = NA_Status)) +
+   geom_line(linewidth = 1.2) +
+   geom_point(size = 4, shape = 21, fill = "white") +
+   geom_text(aes(label = scales::comma(NA_Count)), vjust = -0.8, size = 3.5, color = "black") +
+   scale_color_manual(values = c("Clean (0 NAs)" = "darkgreen", "Has NAs" = "red")) +
+   labs(
+     title = "Missing Values in Cleaned Dataset (cleaned_dataset)",
+     x = "Variable", y = "Count of Missing Values", color = "Status"
+   ) +
+   theme_minimal() +
+   theme(
+     axis.text.x = element_text(angle = 45, hjust = 1),
+     plot.title = element_text(hjust = 0.5, face = "bold"),
+     legend.position = "bottom"
+   )
